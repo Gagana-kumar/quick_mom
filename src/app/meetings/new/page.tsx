@@ -1,8 +1,13 @@
-import { getAttendees } from "@/lib/actions";
+import { getAttendees, getCurrentUser } from "@/lib/actions";
 import CreateMeetingForm from "@/components/meetings/CreateMeetingForm";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { redirect } from "next/navigation";
 
 export default async function NewMeetingPage() {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect('/login');
+  }
   const attendees = await getAttendees();
 
   return (

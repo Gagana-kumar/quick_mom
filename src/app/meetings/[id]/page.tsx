@@ -1,8 +1,12 @@
-import { getActionItemsForMeeting, getAttendees, getMeetingById } from '@/lib/actions';
-import { notFound } from 'next/navigation';
+import { getActionItemsForMeeting, getAttendees, getMeetingById, getCurrentUser } from '@/lib/actions';
+import { notFound, redirect } from 'next/navigation';
 import MeetingClient from '@/components/meetings/MeetingClient';
 
 export default async function MeetingDetailsPage({ params }: { params: { id: string } }) {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect('/login');
+  }
   const meeting = await getMeetingById(params.id);
   const allAttendees = await getAttendees();
   const allActionItems = await getActionItemsForMeeting(params.id);
@@ -11,7 +15,9 @@ export default async function MeetingDetailsPage({ params }: { params: { id: str
     notFound();
   }
 
-  const attendees = meeting.attendeeIds.map(id => allAttendees.find(a => a.id === id)).filter(Boolean);
+  const attendees = meeting.attendeeIds
+    .map(id => allAttendees.find(a => a.id === id))
+    .filter((a): a is typeof allAttendees[0] => a !== undefined);
 
   return <MeetingClient meeting={meeting} attendees={attendees} actionItems={allActionItems} />;
 }

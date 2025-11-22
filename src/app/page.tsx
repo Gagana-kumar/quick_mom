@@ -1,12 +1,17 @@
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
 
+import { redirect } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { getMeetings } from '@/lib/actions';
+import { getMeetings, getCurrentUser } from '@/lib/actions';
 import MeetingCard from '@/components/meetings/MeetingCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default async function HomePage() {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect('/login');
+  }
   const meetings = await getMeetings();
 
   return (

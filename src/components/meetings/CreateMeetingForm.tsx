@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useActionState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useFormState, useFormStatus } from 'react-dom';
+import { useFormStatus } from 'react-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -10,7 +10,6 @@ import { format } from 'date-fns';
 import { Calendar as CalendarIcon, Loader2 } from 'lucide-react';
 
 import { createMeeting } from '@/lib/actions';
-import type { Attendee } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -33,9 +32,7 @@ const MeetingFormSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters.'),
   description: z.string().min(10, 'Description must be at least 10 characters.'),
   date: z.date({ required_error: 'A date is required.' }),
-  attendeeIds: z.array(z.string()).refine((value) => value.some((item) => item), {
-    message: 'You have to select at least one attendee.',
-  }),
+  attendeeIds: z.array(z.string()).optional(),
 });
 
 type MeetingFormValues = z.infer<typeof MeetingFormSchema>;
@@ -55,10 +52,10 @@ function SubmitButton() {
   );
 }
 
-export default function CreateMeetingForm({ attendees }: { attendees: Attendee[] }) {
+export default function CreateMeetingForm({ attendees }: { attendees: any[] }) {
   const router = useRouter();
   const { toast } = useToast();
-  const [state, formAction] = useFormState(createMeeting, initialState);
+  const [state, formAction, isPending] = useActionState(createMeeting, initialState);
 
   const form = useForm<MeetingFormValues>({
     resolver: zodResolver(MeetingFormSchema),
@@ -90,7 +87,9 @@ export default function CreateMeetingForm({ attendees }: { attendees: Attendee[]
     formData.append('title', data.title);
     formData.append('description', data.description);
     formData.append('date', data.date.toISOString());
-    data.attendeeIds.forEach(id => formData.append('attendeeIds', id));
+    if (data.attendeeIds) {
+      data.attendeeIds.forEach(id => formData.append('attendeeIds', id));
+    }
     formAction(formData);
   }
 
@@ -158,6 +157,7 @@ export default function CreateMeetingForm({ attendees }: { attendees: Attendee[]
             </FormItem>
           )}
         />
+
         <FormField
           control={form.control}
           name="attendeeIds"
@@ -167,41 +167,47 @@ export default function CreateMeetingForm({ attendees }: { attendees: Attendee[]
                 <FormLabel className="text-base">Attendees</FormLabel>
                 <FormDescription>Select the people who will be attending.</FormDescription>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-              {attendees.map((item) => (
-                <FormField
-                  key={item.id}
-                  control={form.control}
-                  name="attendeeIds"
-                  render={({ field }) => {
-                    return (
-                      <FormItem
-                        key={item.id}
-                        className="flex flex-row items-center space-x-3 space-y-0"
-                      >
-                        <FormControl>
-                          <Checkbox
-                            checked={field.value?.includes(item.id)}
-                            onCheckedChange={(checked) => {
-                              return checked
-                                ? field.onChange([...(field.value || []), item.id])
-                                : field.onChange(
-                                    field.value?.filter((value) => value !== item.id)
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border rounded-md p-4">
+                {attendees.length === 0 && (
+                  <p className="text-sm text-muted-foreground col-span-2">No users found. Please ask admin to seed the database.</p>
+                )}
+                {attendees.map((item) => (
+                  <FormField
+                    key={item.id}
+                    control={form.control}
+                    name="attendeeIds"
+                    render={({ field }) => {
+                      return (
+                        <FormItem
+                          key={item.id}
+                          className="flex flex-row items-center space-x-3 space-y-0"
+                        >
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value?.includes(item.id.toString())}
+                              onCheckedChange={(checked) => {
+                                return checked
+                                  ? field.onChange([...(field.value || []), item.id.toString()])
+                                  : field.onChange(
+                                    field.value?.filter((value) => value !== item.id.toString())
                                   );
-                            }}
-                          />
-                        </FormControl>
-                        <FormLabel className="font-normal">{item.name}</FormLabel>
-                      </FormItem>
-                    );
-                  }}
-                />
-              ))}
+                              }}
+                            />
+                          </FormControl>
+                          <FormLabel className="font-normal cursor-pointer">
+                            {item.username} <span className="text-xs text-muted-foreground">({item.email})</span>
+                          </FormLabel>
+                        </FormItem>
+                      );
+                    }}
+                  />
+                ))}
               </div>
               <FormMessage />
             </FormItem>
           )}
         />
+
         <SubmitButton />
       </form>
     </Form>

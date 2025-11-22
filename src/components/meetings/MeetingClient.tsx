@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useFormState, useFormStatus } from 'react-dom';
+import { useState, useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -74,10 +74,10 @@ export default function MeetingClient({ meeting, attendees, actionItems }: { mee
   const [isPointFormOpen, setIsPointFormOpen] = useState<string | false>(false);
   const [isActionItemFormOpen, setIsActionItemFormOpen] = useState<string | false>(false);
 
-  const [topicFormState, topicFormAction] = useFormState(addTopic, { message: '' });
-  const [pointFormState, pointFormAction] = useFormState(addDiscussionPoint, { message: '' });
-  const [actionItemFormState, actionItemFormAction] = useFormState(addActionItem, { message: '' });
-  
+  const [topicFormState, topicFormAction, isTopicPending] = useActionState(addTopic, { message: '' });
+  const [pointFormState, pointFormAction, isPointPending] = useActionState(addDiscussionPoint, { message: '' });
+  const [actionItemFormState, actionItemFormAction, isActionItemPending] = useActionState(addActionItem, { message: '' });
+
   const topicForm = useForm({ resolver: zodResolver(TopicSchema), defaultValues: { title: '' } });
   const pointForm = useForm({ resolver: zodResolver(PointSchema), defaultValues: { text: '' } });
   const actionItemForm = useForm({ resolver: zodResolver(ActionItemSchema) });
@@ -108,9 +108,14 @@ export default function MeetingClient({ meeting, attendees, actionItems }: { mee
     reader.onload = async () => {
       const audioDataUri = reader.result as string;
       const result = await runTranscribeAudio(meeting.id, audioDataUri);
-      setTranscription(result);
+
+      if (result.startsWith('Failed')) {
+        toast({ title: 'Transcription failed', description: 'Please try again.', variant: 'destructive' });
+      } else {
+        setTranscription(result);
+        toast({ title: 'Audio transcribed!', description: 'The text has been saved.' });
+      }
       setLoading(prev => ({ ...prev, transcribe: false }));
-      toast({ title: 'Audio transcribed!' });
     };
   };
 
@@ -135,16 +140,16 @@ export default function MeetingClient({ meeting, attendees, actionItems }: { mee
                   </DialogHeader>
                   <Form {...topicForm}>
                     <form action={topicFormAction} onSubmit={topicForm.handleSubmit((data) => {
-                        const formData = new FormData();
-                        formData.append('meetingId', meeting.id);
-                        formData.append('title', data.title);
-                        topicFormAction(formData);
-                        setIsTopicFormOpen(false);
-                        topicForm.reset();
+                      const formData = new FormData();
+                      formData.append('meetingId', meeting.id);
+                      formData.append('title', data.title);
+                      topicFormAction(formData);
+                      setIsTopicFormOpen(false);
+                      topicForm.reset();
                     })} className="space-y-4">
                       <input type="hidden" name="meetingId" value={meeting.id} />
                       <FormField control={topicForm.control} name="title" render={({ field }) => (
-                          <FormItem><FormLabel>Title</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                        <FormItem><FormLabel>Title</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                       )} />
                       <DialogFooter><SubmitButton>Add Topic</SubmitButton></DialogFooter>
                     </form>
@@ -169,16 +174,16 @@ export default function MeetingClient({ meeting, attendees, actionItems }: { mee
                           <DialogHeader><DialogTitle>Add Discussion Point to "{topic.title}"</DialogTitle></DialogHeader>
                           <Form {...pointForm}>
                             <form action={pointFormAction} onSubmit={pointForm.handleSubmit(data => {
-                                const formData = new FormData();
-                                formData.append('meetingId', meeting.id);
-                                formData.append('topicId', topic.id);
-                                formData.append('text', data.text);
-                                pointFormAction(formData);
-                                setIsPointFormOpen(false);
-                                pointForm.reset();
+                              const formData = new FormData();
+                              formData.append('meetingId', meeting.id);
+                              formData.append('topicId', topic.id);
+                              formData.append('text', data.text);
+                              pointFormAction(formData);
+                              setIsPointFormOpen(false);
+                              pointForm.reset();
                             })} className="space-y-4">
                               <FormField control={pointForm.control} name="text" render={({ field }) => (
-                                  <FormItem><FormLabel>Point</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>
+                                <FormItem><FormLabel>Point</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>
                               )} />
                               <DialogFooter><SubmitButton>Add Point</SubmitButton></DialogFooter>
                             </form>
@@ -191,7 +196,7 @@ export default function MeetingClient({ meeting, attendees, actionItems }: { mee
               </Accordion>
             </CardContent>
           </Card>
-          
+
           {/* Action Items */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -200,53 +205,53 @@ export default function MeetingClient({ meeting, attendees, actionItems }: { mee
                 <CardDescription>Tasks and responsibilities.</CardDescription>
               </div>
               <Dialog open={isActionItemFormOpen === meeting.id} onOpenChange={(isOpen) => setIsActionItemFormOpen(isOpen ? meeting.id : false)}>
-                  <DialogTrigger asChild><Button variant="outline"><Plus className="mr-2 h-4 w-4" />Add Item</Button></DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader><DialogTitle>Add Action Item</DialogTitle></DialogHeader>
-                    <Form {...actionItemForm}>
+                <DialogTrigger asChild><Button variant="outline"><Plus className="mr-2 h-4 w-4" />Add Item</Button></DialogTrigger>
+                <DialogContent>
+                  <DialogHeader><DialogTitle>Add Action Item</DialogTitle></DialogHeader>
+                  <Form {...actionItemForm}>
                     <form action={actionItemFormAction} onSubmit={actionItemForm.handleSubmit(data => {
-                        const formData = new FormData();
-                        formData.append('meetingId', meeting.id);
-                        formData.append('topicId', meeting.topics[0]?.id || 'general');
-                        formData.append('task', data.task);
-                        formData.append('assigneeId', data.assigneeId);
-                        formData.append('dueDate', data.dueDate.toISOString());
-                        actionItemFormAction(formData);
-                        setIsActionItemFormOpen(false);
-                        actionItemForm.reset();
+                      const formData = new FormData();
+                      formData.append('meetingId', meeting.id);
+                      formData.append('topicId', meeting.topics[0]?.id || 'general');
+                      formData.append('task', data.task);
+                      formData.append('assigneeId', data.assigneeId);
+                      formData.append('dueDate', data.dueDate.toISOString());
+                      actionItemFormAction(formData);
+                      setIsActionItemFormOpen(false);
+                      actionItemForm.reset();
                     })} className="space-y-4">
-                        <FormField control={actionItemForm.control} name="task" render={({ field }) => (
-                            <FormItem><FormLabel>Task</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>
-                        )}/>
-                        <FormField control={actionItemForm.control} name="assigneeId" render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Assign To</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                              <FormControl><SelectTrigger><SelectValue placeholder="Select an attendee" /></SelectTrigger></FormControl>
-                              <SelectContent>{attendees.map(a => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}</SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}/>
-                        <FormField control={actionItemForm.control} name="dueDate" render={({ field }) => (
-                          <FormItem className="flex flex-col">
-                            <FormLabel>Due Date</FormLabel>
-                            <Popover><PopoverTrigger asChild><FormControl>
-                              <Button variant="outline" className={cn('w-full pl-3 text-left font-normal', !field.value && 'text-muted-foreground')}>
-                                {field.value ? format(field.value, 'PPP') : <span>Pick a date</span>}
-                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                              </Button>
-                            </FormControl></PopoverTrigger>
+                      <FormField control={actionItemForm.control} name="task" render={({ field }) => (
+                        <FormItem><FormLabel>Task</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                      <FormField control={actionItemForm.control} name="assigneeId" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Assign To</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Select an attendee" /></SelectTrigger></FormControl>
+                            <SelectContent>{attendees.map(a => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}</SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={actionItemForm.control} name="dueDate" render={({ field }) => (
+                        <FormItem className="flex flex-col">
+                          <FormLabel>Due Date</FormLabel>
+                          <Popover><PopoverTrigger asChild><FormControl>
+                            <Button variant="outline" className={cn('w-full pl-3 text-left font-normal', !field.value && 'text-muted-foreground')}>
+                              {field.value ? format(field.value, 'PPP') : <span>Pick a date</span>}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                          </FormControl></PopoverTrigger>
                             <PopoverContent className="w-auto p-0" align="start">
-                              <CalendarComponent mode="single" selected={field.value} onSelect={field.onChange} initialFocus/>
+                              <CalendarComponent mode="single" selected={field.value} onSelect={field.onChange} initialFocus />
                             </PopoverContent></Popover>
-                            <FormMessage />
-                          </FormItem>
-                        )}/>
-                        <DialogFooter><SubmitButton>Add Action Item</SubmitButton></DialogFooter>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <DialogFooter><SubmitButton>Add Action Item</SubmitButton></DialogFooter>
                     </form>
-                    </Form>
-                  </DialogContent>
+                  </Form>
+                </DialogContent>
               </Dialog>
             </CardHeader>
             <CardContent>
@@ -263,12 +268,12 @@ export default function MeetingClient({ meeting, attendees, actionItems }: { mee
                   {actionItems.map(item => {
                     const assignee = attendees.find(a => a.id === item.assigneeId);
                     return (
-                        <TableRow key={item.id}>
-                          <TableCell><Checkbox checked={item.completed} onCheckedChange={() => toggleActionItemComplete(item.id, meeting.id)} /></TableCell>
-                          <TableCell className={cn(item.completed && 'line-through text-muted-foreground')}>{item.task}</TableCell>
-                          <TableCell>{assignee?.name || 'Unassigned'}</TableCell>
-                          <TableCell>{format(new Date(item.dueDate), 'MMM d, yyyy')}</TableCell>
-                        </TableRow>
+                      <TableRow key={item.id}>
+                        <TableCell><Checkbox checked={item.completed} onCheckedChange={() => toggleActionItemComplete(item.id, meeting.id)} /></TableCell>
+                        <TableCell className={cn(item.completed && 'line-through text-muted-foreground')}>{item.task}</TableCell>
+                        <TableCell>{assignee?.name || 'Unassigned'}</TableCell>
+                        <TableCell>{format(new Date(item.dueDate), 'MMM d, yyyy')}</TableCell>
+                      </TableRow>
                     );
                   })}
                 </TableBody>
@@ -300,26 +305,26 @@ export default function MeetingClient({ meeting, attendees, actionItems }: { mee
           {/* AI Features */}
           <Card>
             <CardHeader>
-                <CardTitle className="font-headline flex items-center"><Sparkles className="mr-2 h-5 w-5 text-accent" />AI Assistant</CardTitle>
-                <CardDescription>Generate summaries, extract tasks, and more.</CardDescription>
+              <CardTitle className="font-headline flex items-center"><Sparkles className="mr-2 h-5 w-5 text-accent" />AI Assistant</CardTitle>
+              <CardDescription>Generate summaries, extract tasks, and more.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-                {/* Summary */}
-                <Button onClick={handleGenerateSummary} disabled={loading.summary} className="w-full bg-accent/20 text-accent-foreground hover:bg-accent/30"><FileText className="mr-2 h-4 w-4" />{loading.summary ? 'Generating...' : 'Generate Summary'}</Button>
-                {summary && <Card className="bg-background"><CardContent className="p-4 text-sm whitespace-pre-wrap font-sans">{summary}</CardContent></Card>}
+              {/* Summary */}
+              <Button onClick={handleGenerateSummary} disabled={loading.summary} className="w-full bg-accent/20 text-accent-foreground hover:bg-accent/30"><FileText className="mr-2 h-4 w-4" />{loading.summary ? 'Generating...' : 'Generate Summary'}</Button>
+              {summary && <Card className="bg-background"><CardContent className="p-4 text-sm whitespace-pre-wrap font-sans">{summary}</CardContent></Card>}
 
-                {/* Action Items */}
-                <Button onClick={handleExtractActionItems} disabled={loading.extract} className="w-full bg-accent/20 text-accent-foreground hover:bg-accent/30"><ClipboardCheck className="mr-2 h-4 w-4" />{loading.extract ? 'Extracting...' : 'Extract Action Items'}</Button>
-                {extractedItems.length > 0 && (
-                    <Card className="bg-background"><CardContent className="p-4 text-sm space-y-2">
-                        {extractedItems.map((item, i) => <p key={i}><strong>{item.assignee}:</strong> {item.item} (by {item.deadline})</p>)}
-                    </CardContent></Card>
-                )}
+              {/* Action Items */}
+              <Button onClick={handleExtractActionItems} disabled={loading.extract} className="w-full bg-accent/20 text-accent-foreground hover:bg-accent/30"><ClipboardCheck className="mr-2 h-4 w-4" />{loading.extract ? 'Extracting...' : 'Extract Action Items'}</Button>
+              {extractedItems.length > 0 && (
+                <Card className="bg-background"><CardContent className="p-4 text-sm space-y-2">
+                  {extractedItems.map((item, i) => <p key={i}><strong>{item.assignee}:</strong> {item.item} (by {item.deadline})</p>)}
+                </CardContent></Card>
+              )}
 
-                {/* Transcription */}
-                <Button asChild className="w-full bg-accent/20 text-accent-foreground hover:bg-accent/30"><label htmlFor="audio-upload"><Mic className="mr-2 h-4 w-4" />{loading.transcribe ? 'Transcribing...' : 'Transcribe Audio'}</label></Button>
-                <Input id="audio-upload" type="file" accept="audio/*" onChange={handleTranscribeAudio} className="hidden" />
-                {transcription && <Card className="bg-background"><CardContent className="p-4 text-sm whitespace-pre-wrap font-sans">{transcription}</CardContent></Card>}
+              {/* Transcription */}
+              <Button asChild className="w-full bg-accent/20 text-accent-foreground hover:bg-accent/30"><label htmlFor="audio-upload"><Mic className="mr-2 h-4 w-4" />{loading.transcribe ? 'Transcribing...' : 'Transcribe Audio'}</label></Button>
+              <Input id="audio-upload" type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac,.aac,.wma,.m4p" onChange={handleTranscribeAudio} className="hidden" />
+              {transcription && <Card className="bg-background"><CardContent className="p-4 text-sm whitespace-pre-wrap font-sans">{transcription}</CardContent></Card>}
             </CardContent>
           </Card>
         </aside>
